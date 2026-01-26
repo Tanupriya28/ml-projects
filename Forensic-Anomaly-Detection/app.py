@@ -4,9 +4,12 @@ import numpy as np
 from datetime import datetime
 from fpdf import FPDF
 import plotly.express as px
+import plotly.io as pio
 import joblib
 
 st.set_page_config(page_title="Forensic Data Integrity Checker", layout="wide")
+pio.templates.default = "plotly_dark"
+
 
 # ---------------------------
 # FEATURE ENGINEERING, PDF, EXPLAIN, LOAD MODELS
@@ -113,6 +116,25 @@ def run_anomaly_detection(X, iso_model, xgb_model):
     xgb_pred = xgb_model.predict(X)
     final_anomaly = np.where((iso_pred + xgb_pred)>=1,1,0)
     return iso_pred, xgb_pred, final_anomaly
+
+def fix_plotly_visibility(fig):
+    fig.update_layout(
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(color="black", size=14),
+        title_font=dict(color="black", size=18),
+        legend=dict(font=dict(color="black")),
+        xaxis=dict(
+            title_font=dict(color="black"),
+            tickfont=dict(color="black")
+        ),
+        yaxis=dict(
+            title_font=dict(color="black"),
+            tickfont=dict(color="black")
+        )
+    )
+    return fig
+
 
 # ---------------------------
 # MODERN UI
@@ -285,11 +307,7 @@ ul[role="listbox"] li:hover {
     background: #0f1115 !important;
     border-radius: 12px;
 }
-.plotly text,
-g.xtick text,
-g.ytick text {
-    fill: #ffffff !important;
-}
+
 g.grid line {
     stroke: #333 !important;
 }
@@ -374,16 +392,20 @@ if uploaded_file:
 
         # Delay Distribution
         fig1 = px.histogram(df_filtered, x="delay_hours", nbins=30, hover_data=["district","victim_age"], color_discrete_sequence=['#4f46e5'], title="Delay Hours Distribution")
+        fig1 = fix_plotly_visibility(fig1)
         st.plotly_chart(fig1, use_container_width=True)
         st.markdown("**Analysis:** Most cases cluster between low delay hours (0–50 hours). Peaks in higher ranges indicate a small number of cases with unusually long delays, which could warrant further investigation.")
 
         # Delay vs Severity
         fig2 = px.scatter(df_filtered, x="delay_hours", y="severity_score", color="final_anomaly", hover_data=["district","victim_age"], color_discrete_sequence=['#6366f1','#f43f5e'], title="Delay vs Severity")
+        fig2 = fix_plotly_visibility(fig2)
         st.plotly_chart(fig2, use_container_width=True)
         st.markdown("**Analysis:** The scatter shows that cases with higher delay tend to have higher severity. Blue points represent flagged anomalies—these typically have extreme delay and severity values.")
 
         # Top Keywords Frequency
         fig3 = px.bar(x=list(df_features.attrs["top_keywords"].keys()), y=list(df_features.attrs["top_keywords"].values()), text=list(df_features.attrs["top_keywords"].values()), color=list(df_features.attrs["top_keywords"].values()), color_continuous_scale=px.colors.sequential.Purples, title="Top Keywords Frequency")
+        fig3.update_traces(textfont=dict(color="black", size=14))
+        fig3 = fix_plotly_visibility(fig3)
         st.plotly_chart(fig3, use_container_width=True)
         top_kw_sorted = sorted(df_features.attrs["top_keywords"].items(), key=lambda x: x[1], reverse=True)
         most_freq_kw = top_kw_sorted[0][0] if top_kw_sorted else "None"
@@ -392,6 +414,7 @@ if uploaded_file:
         # Avg Delay & Severity per District
         district_stats = df_filtered.groupby("district").agg({"delay_hours":"mean","severity_score":"mean","final_anomaly":"sum"}).reset_index()
         fig_avg = px.bar(district_stats, x="district", y=["delay_hours","severity_score"], barmode='group', color_discrete_sequence=['#4f46e5','#f43f5e'], title="Avg Delay & Severity per District")
+        fig_avg = fix_plotly_visibility(fig_avg)
         st.plotly_chart(fig_avg, use_container_width=True)
         st.markdown("**Analysis:** Some districts consistently show higher average delay and severity scores. Taller bars highlight districts needing closer monitoring for anomalies.")
 
@@ -399,6 +422,8 @@ if uploaded_file:
         top_officers = df_features[df_features["final_anomaly"]==1]["officer_id"].value_counts().head(10)
         if not top_officers.empty:
             fig_officers = px.bar(x=top_officers.index, y=top_officers.values, text=top_officers.values, color=top_officers.values, color_continuous_scale=px.colors.sequential.Viridis, title="Top Officers by Suspicious Cases")
+            fig_officers.update_traces(textfont=dict(color="black", size=14))  
+            fig_officers = fix_plotly_visibility(fig_officers)  
             st.plotly_chart(fig_officers, use_container_width=True)
             st.markdown("**Analysis:** Officers with higher bars are repeatedly handling suspicious cases. This may indicate areas to review for procedural consistency or anomalies.")
 
@@ -408,6 +433,8 @@ if uploaded_file:
         df_filtered["severity_level"] = pd.cut(df_filtered["severity_score"], bins=severity_bins, labels=severity_labels)
         severity_counts = df_filtered["severity_level"].value_counts()
         fig_severity = px.pie(values=severity_counts.values, names=severity_counts.index, color_discrete_sequence=['#4f46e5','#6366f1','#f43f5e'], title="Severity Level Breakdown")
+        fig_severity.update_traces(textfont=dict(color="black", size=16))  
+        fig_severity = fix_plotly_visibility(fig_severity) 
         st.plotly_chart(fig_severity, use_container_width=True)
         st.markdown("**Analysis:** Most cases fall under Low or Medium severity. High severity cases, although fewer, are critical for attention and investigation.")
 
@@ -415,6 +442,8 @@ if uploaded_file:
         keyword_matrix = pd.DataFrame([{**{"district": row["district"]}, **{k: str(row["narrative"]).lower().count(k) for k in df_features.attrs["top_keywords"].keys()}} for idx, row in df_filtered.iterrows()])
         keyword_heat = keyword_matrix.groupby("district").sum()
         fig_heat = px.imshow(keyword_heat, text_auto=True, aspect="auto", color_continuous_scale=px.colors.sequential.Purples, title="Keyword Frequency Heatmap by District")
+        fig_heat.update_traces(textfont=dict(color="black", size=12))  
+        fig_heat = fix_plotly_visibility(fig_heat) 
         st.plotly_chart(fig_heat, use_container_width=True)
         st.markdown("**Analysis:** Darker cells indicate higher counts of specific keywords per district. This helps identify regions where particular issues (e.g., 'not available') appear more frequently.")
 
@@ -455,3 +484,5 @@ if uploaded_file:
             st.download_button("Save Suspicious PDF", pdf_bytes, "suspicious_cases.pdf", "application/pdf")
 else:
     st.info("Please upload a CSV file to begin.")
+
+
