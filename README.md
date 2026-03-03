@@ -1,2 +1,2 @@
 # ML-Projects
-Collection of applied machine learning projects and experiments
+Applied AI and machine learning projects focused on real-world problem solving and scalable system design.
